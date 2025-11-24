@@ -2,7 +2,6 @@
 
 Transform your photos into high-definition, AI-crafted portraits in seconds.
 
-![MugShot Studio Banner]
 <img width="1893" height="913" alt="image" src="https://github.com/user-attachments/assets/5b1463fa-7c65-4f3e-bc1e-80f3c21cfaed" />
 
 
