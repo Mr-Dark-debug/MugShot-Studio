@@ -11,13 +11,15 @@ import Link from 'next/link';
 import { Button } from '@/src/components/ui/button';
 import { Input } from '@/src/components/ui/input';
 import { AtSignIcon } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 type AuthModalProps = Omit<React.ComponentProps<typeof Modal>, 'children'>;
 
 export function AuthModal(props: AuthModalProps) {
+    const router = useRouter();
     return (
         <Modal {...props}>
-            <ModalContent 
+            <ModalContent
                 popoverProps={{
                     className: "bg-white border border-[#0f7d70] shadow-xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-bottom-2 data-[state=open]:slide-in-from-left-1/2 duration-300 rounded-xl"
                 }}
@@ -64,6 +66,7 @@ export function AuthModal(props: AuthModalProps) {
                     <Button
                         type="button"
                         className="w-full duration-300 bg-[#0f7d70] hover:bg-[#0c6a61] text-white h-12 rounded-lg font-medium"
+                        onClick={() => router.push('/chat')}
                     >
                         <span>Continue With Email</span>
                     </Button>
