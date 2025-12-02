@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Home, User, Settings, Bell, Grid, PanelLeftClose, PanelLeftOpen, Search, Edit } from "lucide-react";
+import { Home, User, Settings, Bell, Grid, PanelLeftClose, PanelLeftOpen, Search, Edit, Book } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 
 const Sidebar = ({ children }: { children?: React.ReactNode }) => {
@@ -53,13 +53,13 @@ const Sidebar = ({ children }: { children?: React.ReactNode }) => {
                 )}
             >
                 <div className="flex items-center justify-between p-4 h-16 border-b border-gray-100">
-                    {!isCollapsed && <span className="font-bold text-lg truncate">MugShot Studio</span>}
+                    {!isCollapsed && <span className="font-bold text-lg truncate" style={{ color: '#0f7d70', fontFamily: 'Silver Garden, sans-serif' }}>MugShot Studio</span>}
                     <button
                         onClick={toggleCollapse}
                         className="p-2 hover:bg-gray-100 rounded-lg transition-colors ml-auto"
                         aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
                     >
-                        {isCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+                        {isCollapsed ? <PanelLeftOpen size={20} className="text-black" /> : <PanelLeftClose size={20} className="text-black" />}
                     </button>
                 </div>
 
@@ -71,11 +71,10 @@ const Sidebar = ({ children }: { children?: React.ReactNode }) => {
                 {/* Mobile Header */}
                 <div className="md:hidden flex items-center p-4 border-b border-gray-200 bg-white sticky top-0 z-20">
                     <button onClick={toggleMobileSidebar} className="p-2 -ml-2 hover:bg-gray-100 rounded-lg">
-                        <PanelLeftOpen size={24} />
+                        <PanelLeftOpen size={24} className="text-black" />
                     </button>
-                    <span className="ml-2 font-bold">MugShot Studio</span>
+                    <span className="ml-2 font-bold" style={{ color: '#0f7d70', fontFamily: 'Silver Garden, sans-serif' }}>MugShot Studio</span>
                 </div>
-
                 <main className="flex-1 relative">
                     {children}
                 </main>
@@ -88,8 +87,9 @@ const SidebarContent = ({ isCollapsed }: { isCollapsed: boolean }) => {
     return (
         <div className="flex flex-col h-full py-4">
             <div className="px-3 mb-6 space-y-1">
-                <SidebarItem icon={Edit} label="New Chat" isCollapsed={isCollapsed} />
-                <SidebarItem icon={Search} label="Search" isCollapsed={isCollapsed} />
+                <SidebarItem icon={Edit} label="New chat" isCollapsed={isCollapsed} />
+                <SidebarItem icon={Search} label="Search chats" isCollapsed={isCollapsed} />
+                <SidebarItem icon={Book} label="Library" isCollapsed={isCollapsed} />
             </div>
 
             <div className="flex-1 overflow-y-auto px-3 space-y-1">
