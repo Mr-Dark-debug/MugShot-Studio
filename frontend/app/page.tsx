@@ -47,7 +47,7 @@ export default function Home() {
                   Get Started
                 </button>
               </div>
-              <div className="hidden md:block w-full">
+              <div className="hidden md:block w-full max-w-2xl mx-auto">
                 <AI_Prompt />
               </div>
             </div>
