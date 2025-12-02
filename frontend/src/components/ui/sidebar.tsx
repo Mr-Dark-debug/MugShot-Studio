@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Home, User, Settings, Bell, Grid, PanelLeftClose, PanelLeftOpen, Search, Edit, Book } from "lucide-react";
 import { cn } from "@/src/lib/utils";
+import { GalleryIcon } from '@/src/components/ui/gallery-icon';
 
 const Sidebar = ({ children }: { children?: React.ReactNode }) => {
     const [isMobileOpen, setIsMobileOpen] = useState(false);
@@ -89,13 +90,15 @@ const SidebarContent = ({ isCollapsed }: { isCollapsed: boolean }) => {
             <div className="px-3 mb-6 space-y-1">
                 <SidebarItem icon={Edit} label="New chat" isCollapsed={isCollapsed} />
                 <SidebarItem icon={Search} label="Search chats" isCollapsed={isCollapsed} />
-                <SidebarItem icon={Grid} label="Library" isCollapsed={isCollapsed} />
+                <SidebarItem icon={GalleryIcon} label="Library" isCollapsed={isCollapsed} />
             </div>
 
             <div className="flex-1 overflow-y-auto px-3 space-y-1">
-                <SidebarItem icon={Home} label="Home" isCollapsed={isCollapsed} active />
-                <SidebarItem icon={Grid} label="Templates" isCollapsed={isCollapsed} />
-                <SidebarItem icon={Bell} label="Notifications" isCollapsed={isCollapsed} />
+
+            </div>
+
+            {/* Move Settings to bottom, before user profile */}
+            <div className="px-3 pb-2">
                 <SidebarItem icon={Settings} label="Settings" isCollapsed={isCollapsed} />
             </div>
 

@@ -7,7 +7,7 @@ export default function ChatPage() {
         <Sidebar>
             <GradientBackground>
                 <div className="flex flex-col items-center justify-center min-h-screen w-full px-4">
-                    <h1 className="text-3xl md:text-4xl font-bold text-[#0f7d70] mb-8 text-center font-silver">
+                    <h1 className="text-3xl md:text-4xl font-bold text-[#2e4539] mb-8 text-center font-sans">
                         What do you want to generate today?
                     </h1>
                     <AI_Prompt />
