@@ -2,7 +2,8 @@
 
 Transform your photos into high-definition, AI-crafted thumbnails in seconds.
 
-<img width="1893" height="913" alt="image" src="https://github.com/user-attachments/assets/5b1463fa-7c65-4f3e-bc1e-80f3c21cfaed" />
+<img width="1861" height="929" alt="image" src="https://github.com/user-attachments/assets/4d6ee2e9-2581-4145-a384-40b4345fdfdf" />
+<img width="1703" height="889" alt="image" src="https://github.com/user-attachments/assets/2faa33d7-b48a-4fd7-96b5-d883a43f03ed" />
 
 
 MugShot Studio is an innovative AI-powered platform that converts your regular photos into professional-quality thumbnails. Leveraging cutting-edge artificial intelligence, our service delivers stunning results in just seconds.
@@ -14,6 +15,9 @@ MugShot Studio is an innovative AI-powered platform that converts your regular p
 - **Fast Processing**: Transform your photos in just 5 seconds
 - **Multiple Platform Presets**: Choose from 10+ platform-specific presets for optimal results
 - **User-Friendly Interface**: Intuitive design makes professional photo editing accessible to everyone
+
+## Chat Page:
+<img width="1919" height="929" alt="image" src="https://github.com/user-attachments/assets/8398e1f7-61ac-4da8-9dc8-103ae422ffd8" />
 
 ## Technology Stack
 
