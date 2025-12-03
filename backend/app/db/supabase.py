@@ -1,12 +1,10 @@
 from supabase import create_client, Client
-from app.core.config import get_settings
+from app.core.config import settings
 
-settings = get_settings()
+_supabase_client: Client = None
 
 def get_supabase() -> Client:
-    url: str = settings.SUPABASE_URL
-    key: str = settings.SUPABASE_KEY
-    if not url or not key:
-        # Return None or raise error if not configured, for now allow None for testing
-        return None
-    return create_client(url, key)
+    global _supabase_client
+    if _supabase_client is None:
+        _supabase_client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+    return _supabase_client

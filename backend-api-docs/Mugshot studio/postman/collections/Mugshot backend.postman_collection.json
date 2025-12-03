@@ -1,0 +1,27 @@
+{
+  "info": {
+    "_postman_id": "bec2aa30-5f0e-4434-9fe2-56f18a1b516d",
+    "name": "Mugshot backend",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "SIGN UP",
+      "request": {
+        "method": "POST",
+        "body": {
+          "mode": "raw",
+          "raw": "",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": ""
+        }
+      }
+    }
+  ]
+}

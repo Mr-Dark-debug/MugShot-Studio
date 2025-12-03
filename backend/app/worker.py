@@ -1,15 +1,15 @@
+import logging
+import base64
+import httpx
 from celery import Celery
 from app.core.config import get_settings
+from app.db.supabase import get_supabase
 from app.services.gemini_service import GeminiService
 from app.services.bytedance_service import ByteDanceService
 from app.services.fal_service import FalService
-from app.db.supabase import get_supabase
-from app.utils.credit_calculator import calculate_job_credits
-from app.utils.logger import logger
-from app.utils.exceptions import ModelGenerationException, InsufficientCreditsException
-import asyncio
-import httpx
-import base64
+from app.utils.credit_calculator import calculate_job_credits, InsufficientCreditsException
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
@@ -52,7 +52,7 @@ def generate_thumbnail_task(self, job_id: str):
         prompt_data = prompt_res.data[0]["raw"]
         
         # Check user credits
-        user_res = supabase.table("profiles").select("credits").eq("id", project["user_id"]).execute()
+        user_res = supabase.table("users").select("credits").eq("id", project["user_id"]).execute()
         user_profile = user_res.data[0] if user_res.data else {"credits": 0}
         user_credits = user_profile.get("credits", 0)
         
@@ -69,7 +69,7 @@ def generate_thumbnail_task(self, job_id: str):
         
         # Deduct credits
         new_credits = user_credits - required_credits
-        supabase.table("profiles").update({"credits": new_credits}).eq("id", project["user_id"]).execute()
+        supabase.table("users").update({"credits": new_credits}).eq("id", project["user_id"]).execute()
         
         # Log credit deduction
         supabase.table("audit").insert({
@@ -223,11 +223,11 @@ def generate_thumbnail_task(self, job_id: str):
         # Refund credits on failure
         if 'required_credits' in locals() and 'project' in locals():
             try:
-                user_res = supabase.table("profiles").select("credits").eq("id", project["user_id"]).execute()
+                user_res = supabase.table("users").select("credits").eq("id", project["user_id"]).execute()
                 current_credits = user_res.data[0].get("credits", 0) if user_res.data else 0
                 refunded_credits = current_credits + required_credits
                 
-                supabase.table("profiles").update({"credits": refunded_credits}).eq("id", project["user_id"]).execute()
+                supabase.table("users").update({"credits": refunded_credits}).eq("id", project["user_id"]).execute()
                 
                 # Log credit refund
                 supabase.table("audit").insert({

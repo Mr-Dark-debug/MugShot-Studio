@@ -1,15 +1,32 @@
 from fastapi import FastAPI
-from app.core.config import get_settings
-from app.api.v1.endpoints import projects, jobs, assets
+from fastapi.middleware.cors import CORSMiddleware
+from app.core.config import settings
+from app.api.v1.endpoints import projects, jobs, assets, auth, chat
 
-settings = get_settings()
+from app.core.logging import setup_logging
 
-app = FastAPI(title=settings.PROJECT_NAME)
+setup_logging()
 
-# Include routers (commented out until created)
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    openapi_url=f"{settings.API_V1_STR}/openapi.json"
+)
+
+# Set all CORS enabled origins
+if settings.BACKEND_CORS_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
 app.include_router(projects.router, prefix=f"{settings.API_V1_STR}/projects", tags=["projects"])
 app.include_router(jobs.router, prefix=f"{settings.API_V1_STR}/jobs", tags=["jobs"])
 app.include_router(assets.router, prefix=f"{settings.API_V1_STR}/assets", tags=["assets"])
+app.include_router(chat.router, prefix=f"{settings.API_V1_STR}/chat", tags=["chat"])
 
 @app.get("/")
 def read_root():

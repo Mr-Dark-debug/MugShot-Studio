@@ -1,0 +1,331 @@
+read the backend folder aswell:
+mplement Backend Auth, Sessions, Storage, and Job Queue for MugShot Studio
+
+Work directory to read first (required):
+D:\Opensource\thumbnail-gen\docs — read every file under this folder (README, provider docs, architecture notes, API contracts, design documents). Use those docs as the single source of truth for provider integrations and expected behavior before making any design choices.
+
+High-level objective:
+Implement a production-ready FastAPI backend that provides secure email/password authentication (signup/signin/forgot password + email confirmation via Supabase), profile photo upload to Supabase Storage, unique-username enforcement, chat sessions with unique UUIDs, and a resilient job queue for image generation and chat background processing using Redis + Celery. Use Supabase as the primary DB and storage. Use environment variables as specified. Do not write frontend code — backend only.
+
+Environment (use these env names exactly):
+
+PROJECT_NAME="Tmughsot studio"
+API_V1_STR="/api/v1"
+
+SUPABASE_URL="https://your-project.supabase.co"
+SUPABASE_KEY="your-anon-key"
+
+GEMINI_API_KEY="your-gemini-api-key"
+BYTEDANCE_API_KEY="your-bytedance-api-key"
+FAL_KEY="your-fal-api-key"
+
+REDIS_URL="redis://localhost:6379/0"
+
+
+Create .env.example with these keys and sensible comments. Use python-dotenv + Pydantic BaseSettings class for loading env.
+
+Preconditions:
+
+Read the docs folder completely. Any conflicts between doc statements must be reconciled by following the doc order: README.md → architecture.md → api-spec.md → provider docs. Document every decision if docs are ambiguous.
+
+Use the official Supabase Python SDK for DB and Storage operations. No homegrown SQL clients.
+
+All new DB schema changes must be delivered as SQL migration files (plain SQL) and a migration plan (which file applies first). Use explicit CREATE TABLE IF NOT EXISTS statements and indexes.
+
+Database schema to implement (must include these tables and fields):
+
+users
+
+id UUID primary key
+
+email text unique not null
+
+email_confirmed boolean default false
+
+password_hash text (nullable for social oauth-only accounts)
+
+username text unique not null
+
+full_name text
+
+dob date
+
+profile_photo_asset_id UUID nullable — FK to assets
+
+plan text default 'free'
+
+credits integer default 0
+
+created_at timestamptz
+
+updated_at timestamptz
+
+assets
+
+id UUID primary key
+
+user_id UUID FK users(id)
+
+type enum('selfie','ref','copy_target','render','profile_photo')
+
+storage_path text
+
+width int
+
+height int
+
+md5 text
+
+created_at timestamptz
+
+projects (thumbnail projects)
+
+id UUID primary key
+
+user_id UUID FK
+
+mode enum('design','copy')
+
+platform, width, height, status enum('draft','queued','running','done','failed')
+
+created_at, updated_at
+
+prompts
+
+id UUID PK
+
+project_id FK
+
+raw_jsonb jsonb
+
+normalized_jsonb jsonb
+
+seed int nullable
+
+model_pref text
+
+jobs
+
+id UUID PK
+
+project_id FK
+
+model text
+
+quality enum('draft','std','4k')
+
+status enum('queued','running','succeeded','failed')
+
+cost_credits int
+
+provider_meta jsonb
+
+started_at, finished_at
+
+renders
+
+id UUID PK
+
+job_id FK
+
+asset_id FK
+
+variant int
+
+meta jsonb
+
+created_at
+
+chats
+
+id UUID PK (used in URLs)
+
+user_id FK
+
+session_name text nullable
+
+created_at, updated_at
+
+messages
+
+id UUID PK
+
+chat_id FK
+
+sender enum('user','system','ai')
+
+content text or jsonb
+
+created_at
+
+audit logs for credit changes and important events
+
+Deliver these as SQL migration files with up scripts; include down scripts optionally.
+
+Authentication & signup flow (must implement exactly):
+
+Entry point: POST /api/v1/auth/start
+
+Payload: { "email": "user@example.com" }
+
+Behavior: check users by email. If user exists and password_hash is set, respond with { "exists": true, "next": "password" }. If user exists but password_hash is null (social-only), respond accordingly. If user does not exist, respond { "exists": false, "next": "create_account" }. Use consistent HTTP status codes and JSON error structure on failure.
+
+Signup (create account): POST /api/v1/auth/signup
+
+Payload: { "email", "password", "confirm_password", "username", "full_name", "dob", "profile_photo_asset_id?" }
+
+Validate: password confirmations; username uniqueness; username regex (alphanumeric + ._-, 3–30 chars); dob reasonable.
+
+Behavior: create user row with hashed password (use Argon2 or Bcrypt), email_confirmed=false. Create profile-photo asset record if provided and ensure the storage path exists. Trigger Supabase email confirmation flow (if Supabase supports sending confirmation email) or send a verification OTP via Supabase SMTP hook. Return 201 with { "user_id", "next": "confirm_email" }.
+
+Signin: POST /api/v1/auth/signin
+
+Payload: { "email", "password" }
+
+Behavior: verify password; if correct and email_confirmed=true issue JWT session token and return user profile + session_token. If email_confirmed=false respond with 403 + message to verify email. Rate limit and lockout after configurable failures.
+
+Email confirmation / OTP: Implement route(s) POST /api/v1/auth/confirm and POST /api/v1/auth/resend-confirmation that integrate with Supabase confirmation flow or your own OTP mechanism using short numeric codes stored hashed in DB for 10 minutes. On successful confirmation set email_confirmed=true and return 200.
+
+Forgot / Reset Password:
+
+POST /api/v1/auth/forgot-password with { "email" } triggers a secure timed reset token emailed to the user via Supabase SMTP or configured email provider.
+
+POST /api/v1/auth/reset-password with { "token", "new_password", "confirm_password" } validates, sets hashed password, invalidates other refresh tokens. Provide proper expiry and one-time usage.
+
+Profile photo uploads:
+
+Client uploads directly to Supabase Storage via presigned URL or signed upload. Backend should validate resulting file (image type, max size 8MB, face quality check). Create assets record and store storage_path. Ensure bucket naming convention: profile_photos, user_assets, renders. Create bucket creation SQL or Supabase CLI instructions in docs.
+
+Session token & auth middleware:
+
+Use JWT signed with JWT_SECRET (from env). Implement depends for FastAPI to get current user from token. All protected endpoints require token. Provide refresh token flow if appropriate.
+
+Chat sessions & unique IDs:
+
+When user navigates to new chat, backend should create a chat record with a new UUID and return URL path: https://localhost/c/{chat_uuid}.
+
+Endpoint: POST /api/v1/chat/new returns { "chat_id": "...", "url": "https://localhost/c/{chat_id}" }.
+
+Messages are saved to messages table. Ensure concurrency safe inserts and message ordering. Provide GET /api/v1/chat/{chat_id} to fetch chat metadata and GET /api/v1/chat/{chat_id}/messages?cursor= for pagination.
+
+Job queue & background processing:
+
+Use Redis + Celery (or RQ if docs specify; prefer Celery). Worker pool must permit concurrent processing of multiple jobs per worker; ensure prefetch_multiplier and concurrency tuned.
+
+Endpoint to enqueue generation: POST /api/v1/project/{project_id}/queue enqueues a job and returns { "job_id": "...", "status": "queued" }. Deduct credits atomically at enqueue time and log in audit. On failure refund credits.
+
+Workers must call provider-specific code in providers/ folder and store provider metadata provider_meta in jobs. Implement retry policies with exponential backoff for transient provider failures. Persist job progress and emit SSE or websocket events for status updates. Provide GET /api/v1/jobs/{job_id} to fetch status.
+
+Concurrency, scaling & robustness requirements:
+
+All DB operations must use transactions where necessary to avoid races (e.g., credit deduction + job enqueue).
+
+Use optimistic locking on critical tables if necessary.
+
+Implement rate limiting on auth routes and on per-user job enqueue endpoints. Use Redis for counters.
+
+Add structured logging and Sentry integration point. Provide example app/core/logging.py.
+
+Error handling & API response contract:
+
+Follow consistent error envelope: { "error": { "code": "string_code", "message": "human message", "details": {...} } }.
+
+Return proper HTTP codes: 200, 201, 400, 401, 403, 404, 409 (conflict), 429, 500.
+
+Validate request body with Pydantic models and return actionable validation errors.
+
+Storage & bucket rules:
+
+Buckets: profile_photos, user_assets, renders (create using Supabase CLI or admin instructions). Enforce object naming convention: {user_id}/{asset_type}/{uuid}_{timestamp}.{ext}.
+
+All public renders are stored with public-read signed URLs expiring by default. Private assets remain private and served via signed URLs.
+
+Migrations & deployment artifacts:
+
+Provide SQL migration files in migrations/ with timestamps. Include an apply_migrations.sh script using psql or Supabase CLI.
+
+Provide docker-compose.yml for local dev with services: fastapi, postgres(or supabase local if available), redis, celery_worker, and flower (optional).
+
+Provide Procfile or systemd example for production.
+
+Provider integrations:
+
+Use official SDKs for Gemini, Fal, Bytedance/Seedream. Implement provider clients under app/providers/ and a base.ImageProvider interface. Respect API keys from env.
+
+Each provider client must return a standard result object: { images: [storage_path], meta: { provider_name, model, latency_ms, cost_estimate } }.
+
+Security & Compliance:
+
+Block celebrity face swaps and obvious non-consensual face replacements as per docs. Add a middleware check to detect flagged faces via provider safety tools.
+
+Store passwords only hashed (Argon2 or bcrypt with salt). Do not log sensitive data.
+
+Add CORS and CSRF protections where necessary for cookie flows. Use HTTPS in all production instructions.
+
+Testing & QA:
+
+Create unit tests for auth flows, DB migrations tests, job enqueue/dequeue flows, and provider client mocks. Use pytest and provide a conftest.py with test fixtures using a test Supabase project or local Postgres mock.
+
+Provide an integration test that signs up a user, confirms email (simulate), logs in, uploads profile photo, creates a project, enqueues a job, and verifies job transitions to succeeded in a mocked provider environment.
+
+Delivery checklist (must be included in PR):
+
+All new files under app/ following the modular structure; no single-file monoliths.
+
+.env.example and instructions in docs/deployment.md.
+
+SQL migration files in migrations/ and a script to run them.
+
+Docker-compose for local testing.
+
+Celery worker config and generate_thumbnail task with retries.
+
+Auth routes: /auth/start, /auth/signup, /auth/signin, /auth/confirm, /auth/resend-confirmation, /auth/forgot-password, /auth/reset-password.
+
+Profile-photo upload flow and assets creation.
+
+Chat session creation route and messages persistence.
+
+Job enqueue route and GET /api/v1/jobs/{job_id} status.
+
+Consistent error responses and logging.
+
+Unit and integration tests; at least one end-to-end smoke test.
+
+README section “How to run locally” and “How to run migrations”.
+
+Acceptance criteria (automated checks / manual QA):
+
+Running docker-compose up boots API, Redis, and Celery.
+
+Signup flow: calling /auth/start → /auth/signup → email confirmation simulated → /auth/signin returns JWT.
+
+Uploading a profile photo returns an assets record and the users.profile_photo_asset_id is updated.
+
+Creating a chat returns a unique URL with a UUID. Fetching messages returns an empty list initially and saved messages after POST.
+
+Enqueuing a job deducts credits atomically and worker processes it (mocked provider) and job status becomes succeeded.
+
+All endpoints have schema validation and return correct HTTP statuses.
+
+Non-functional notes / priorities:
+
+Implement authentication and session management first — everything depends on correct auth.
+
+Next priority: storage buckets and file upload validation.
+
+Then job queue, provider clients (use mocks for initial testing), chat sessions.
+
+Finally, heavy integration tests and production hardening (rate limits, monitoring, Sentry).
+
+Developer instructions for the agent:
+
+Start by enumerating files in D:\Opensource\thumbnail-gen\docs and produce a 1–2 page summary of any provider-specific constraints and rate limits you must respect.
+
+Then scaffold the FastAPI app skeleton with app/core, app/routes, app/services, app/providers, app/workers, and migrations. Do not implement full provider integrations before auth + storage + queue scaffolding is stable.
+
+Use strict typing and pydantic models. Add inline TODO comments only where external decisions are required. Log every design deviation from docs in docs/decisions.md.
+
+Run unit tests locally and ensure CI job passes (provide example github/workflows/ci.yml that runs lint, tests, and migrations).
+
+Important: do not assume anything not present in the docs folder about provider behavior. If you need clarification or missing credentials, create a docs/clarifications_required.md listing specific items (e.g., provider endpoints, rate limits, SMTP settings) and include example payloads you expect the team to fill.

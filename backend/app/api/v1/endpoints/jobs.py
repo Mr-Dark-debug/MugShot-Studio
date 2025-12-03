@@ -61,7 +61,7 @@ async def create_job(
         credits_needed = calculate_job_credits(job_data)
         
         # Check user credits
-        profile_res = supabase.table("profiles").select("credits").eq("id", user_id).execute()
+        profile_res = supabase.table("users").select("credits").eq("id", user_id).execute()
         if not profile_res.data:
             raise HTTPException(status_code=400, detail="User profile not found")
         

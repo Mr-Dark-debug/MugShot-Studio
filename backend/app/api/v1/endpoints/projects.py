@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from app.core.security import get_current_user
 from app.db.supabase import get_supabase
-from app.utils.exceptions import handle_exception
+from app.utils.exceptions import handle_exception, InsufficientCreditsException
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
+from app.worker import generate_thumbnail_task
+from app.utils.credit_calculator import calculate_job_credits
+from app.core.ratelimit import RateLimiter
 
 router = APIRouter()
 
@@ -38,6 +41,16 @@ class ProjectResponse(BaseModel):
     platform: str
     width: int
     height: int
+
+class JobQueueRequest(BaseModel):
+    quality: str = "std"
+    variants: int = 2
+    model: Optional[str] = None
+
+class JobResponse(BaseModel):
+    job_id: str
+    status: str
+    cost_credits: int
 
 @router.post("/", response_model=ProjectResponse)
 async def create_project(
@@ -161,5 +174,96 @@ async def update_project(
             height=project["height"]
         )
         
+    except Exception as e:
+        raise handle_exception(e)
+
+@router.post("/{project_id}/queue", response_model=JobResponse, dependencies=[Depends(RateLimiter(times=10, seconds=60))])
+async def queue_generation(
+    project_id: str,
+    job_in: JobQueueRequest,
+    user: dict = Depends(get_current_user)
+):
+    supabase = get_supabase()
+    user_id = user.get("id")
+    
+    try:
+        # Verify project ownership
+        proj_res = supabase.table("projects").select("*").eq("id", project_id).eq("user_id", user_id).execute()
+        if not proj_res.data:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        project = proj_res.data[0]
+        
+        # Determine model to use (from request or project default)
+        model = job_in.model
+        if not model:
+            # Fetch from prompt/config
+            prompt_res = supabase.table("prompts").select("model_pref").eq("project_id", project_id).execute()
+            if prompt_res.data:
+                model = prompt_res.data[0].get("model_pref")
+        
+        if not model:
+            model = "nano_banana"
+
+        # Validate model
+        available_models = ["nano_banana", "nano_banana_pro", "seedream", "gemini_flash", "gemini_pro", "fal_flux"]
+        if model not in available_models:
+            model = "nano_banana"
+            
+        # Calculate credits
+        job_data = {
+            "quality": job_in.quality,
+            "mode": project.get("mode", "design"),
+            "model": model
+        }
+        credits_needed = calculate_job_credits(job_data)
+        
+        # Check user credits
+        profile_res = supabase.table("users").select("credits").eq("id", user_id).execute()
+        if not profile_res.data:
+            raise HTTPException(status_code=400, detail="User profile not found")
+        
+        current_credits = profile_res.data[0].get("credits", 0)
+        if current_credits < credits_needed:
+            raise InsufficientCreditsException(f"Need {credits_needed} credits but only have {current_credits}")
+            
+        # Deduct credits (Optimistic locking or transaction would be better, but Supabase API is limited here without RPC)
+        # We will assume single worker for now or accept race condition risk until RPC is implemented
+        # Ideally: supabase.rpc('deduct_credits', {'user_id': user_id, 'amount': credits_needed})
+        
+        # Create Job Record
+        new_job_data = {
+            "project_id": project_id,
+            "model": model,
+            "quality": job_in.quality,
+            "status": "queued",
+            "cost_credits": credits_needed,
+            "provider_meta": {"provider": model} # Store provider in meta
+        }
+        
+        res = supabase.table("jobs").insert(new_job_data).execute()
+        job = res.data[0]
+        
+        # Trigger Celery Task
+        generate_thumbnail_task.delay(job["id"])
+        
+        # Update user credits
+        supabase.table("users").update({"credits": current_credits - credits_needed}).eq("id", user_id).execute()
+        
+        # Log audit
+        audit_data = {
+            "user_id": user_id,
+            "action": "job_queued",
+            "delta_credits": -credits_needed,
+            "meta": {"job_id": job["id"], "project_id": project_id}
+        }
+        supabase.table("audit").insert(audit_data).execute()
+        
+        return JobResponse(
+            job_id=job["id"],
+            status="queued",
+            cost_credits=credits_needed
+        )
+
     except Exception as e:
         raise handle_exception(e)

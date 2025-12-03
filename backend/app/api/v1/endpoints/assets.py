@@ -1,78 +1,76 @@
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, status
-from app.core.security import get_current_user
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
+from app.core.auth import get_current_user
 from app.db.supabase import get_supabase
-from pydantic import BaseModel
+from app.core.config import settings
 import uuid
+import time
 import os
 
 router = APIRouter()
 
-class AssetResponse(BaseModel):
-    id: str
-    path: str
-    url: str
+ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"]
+MAX_FILE_SIZE = 8 * 1024 * 1024  # 8MB
 
-@router.post("/upload", response_model=AssetResponse)
+@router.post("/upload")
 async def upload_asset(
     file: UploadFile = File(...),
-    type: str = "ref", # ref, selfie, copy_target
+    type: str = Form(...), # selfie, ref, copy_target, profile_photo
     user: dict = Depends(get_current_user)
 ):
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid file type. Only JPEG, PNG, WEBP allowed.")
+    
+    # Read file to check size (be careful with large files in memory, but 8MB is manageable)
+    contents = await file.read()
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File size exceeds 8MB limit.")
+    
+    # Bucket selection
+    bucket_name = "user_assets"
+    if type == "profile_photo":
+        bucket_name = "profile_photos"
+    elif type == "render":
+        bucket_name = "renders"
+    
+    # Naming convention: {user_id}/{asset_type}/{uuid}_{timestamp}.{ext}
+    ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+    filename = f"{user['id']}/{type}/{uuid.uuid4()}_{int(time.time())}.{ext}"
+    
     supabase = get_supabase()
-    if not supabase:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-
-    user_id = user.get("id")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="User ID not found")
-
-    # Generate unique path
-    file_ext = file.filename.split(".")[-1]
-    file_name = f"{user_id}/{uuid.uuid4()}.{file_ext}"
-    bucket_name = "assets"
-
+    
     try:
-        # Read file content
-        content = await file.read()
-        
-        # Upload to Supabase Storage
-        # Note: bucket must exist. 
-        res = supabase.storage.from_(bucket_name).upload(
-            path=file_name,
-            file=content,
+        # Upload to Storage
+        supabase.storage.from_(bucket_name).upload(
+            path=filename,
+            file=contents,
             file_options={"content-type": file.content_type}
         )
         
-        # Get public URL (assuming bucket is public, or use signed url)
-        # For now, let's assume we store the path and generate signed urls on retrieval or use public
-        public_url = supabase.storage.from_(bucket_name).get_public_url(file_name)
-
-        # Insert into DB
+        # Get Public URL (or signed URL if private)
+        # For now, assuming public for profile photos, private for others?
+        # Docs: "All public renders are stored with public-read... Private assets remain private"
+        # Let's assume user_assets are private.
+        
+        storage_path = filename # Store the path relative to bucket
+        
+        # Create Asset Record
         asset_data = {
-            "user_id": user_id,
+            "user_id": user["id"],
             "type": type,
-            "path": file_name,
-            "width": 0, # TODO: Extract dimensions
+            "storage_path": storage_path,
+            "width": 0, # TODO: Extract dimensions using Pillow if needed
             "height": 0,
             "md5": "", # TODO: Calculate MD5
         }
         
-        data, count = supabase.table("assets").insert(asset_data).execute()
+        response = supabase.table("assets").insert(asset_data).execute()
+        new_asset = response.data[0]
         
-        if not data or len(data) == 0: # Supabase-py v2 returns data as list in .data usually, but .execute() returns object
-             # Adjust based on supabase-py version. Assuming .execute() returns (data, count) tuple or object with data
-             # Let's assume data[1] is the list if it returns tuple, or data.data
-             pass
-
-        # Re-query to be safe or use returned data
-        # Simply returning constructed response for MVP speed if insert didn't throw
-        created_asset = data[1][0] if isinstance(data, tuple) and len(data) > 1 else data[0] if isinstance(data, list) else {} # Fallback
-
-        return AssetResponse(
-            id=str(created_asset.get("id", uuid.uuid4())), # Fallback ID if DB insert fails silently (shouldn't)
-            path=file_name,
-            url=public_url
-        )
-
+        # If profile photo, update user record
+        if type == "profile_photo":
+            supabase.table("users").update({"profile_photo_asset_id": new_asset["id"]}).eq("id", user["id"]).execute()
+            
+        return new_asset
+        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
