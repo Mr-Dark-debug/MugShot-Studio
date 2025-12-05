@@ -69,5 +69,66 @@ export const authApi = {
         });
         if (!res.ok) throw new Error('Failed to fetch profile');
         return res.json();
+    },
+
+    async updateProfile(token: string, data: Partial<User>): Promise<User> {
+        const res = await fetch(`${API_URL}/api/v1/profile/`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.detail || 'Failed to update profile');
+        }
+        return res.json();
+    },
+
+    async uploadAvatar(token: string, file: File): Promise<{ message: string, url: string }> {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const res = await fetch(`${API_URL}/api/v1/profile/avatar`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+            body: formData,
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.detail || 'Failed to upload avatar');
+        }
+        return res.json();
+    },
+
+    async deleteAvatar(token: string): Promise<{ message: string }> {
+        const res = await fetch(`${API_URL}/api/v1/profile/avatar`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.detail || 'Failed to delete avatar');
+        }
+        return res.json();
+    },
+
+    async deleteAccount(token: string): Promise<void> {
+        const res = await fetch(`${API_URL}/api/v1/profile/`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.detail || 'Failed to delete account');
+        }
     }
 };

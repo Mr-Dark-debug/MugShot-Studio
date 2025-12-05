@@ -95,7 +95,7 @@ function DialogHeader({
             {children}
             {!hideCloseButton && (
                 <DialogPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 opacity-80 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
-                    <XIcon className="text-black" />
+                    <XIcon className="text-[#0f7d70] hover:text-[#0d6d60]" />
                     <span className="sr-only">Close</span>
                 </DialogPrimitive.Close>
             )}
