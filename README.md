@@ -1,4 +1,4 @@
-# MugShot Studio
+# MugShot Studio !
 
 Transform your photos into high-definition, AI-crafted thumbnails in seconds.
 
