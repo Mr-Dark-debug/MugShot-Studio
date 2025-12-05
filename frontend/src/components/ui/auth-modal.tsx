@@ -1,5 +1,5 @@
 'use client';
-import React from 'react';
+import React, { useState } from 'react';
 import {
     Modal,
     ModalBody,
@@ -12,96 +12,326 @@ import {
 import Link from 'next/link';
 import { Button } from '@/src/components/ui/button';
 import { Input } from '@/src/components/ui/input';
-import { AtSignIcon } from 'lucide-react';
+import { AtSignIcon, LockIcon, UserIcon, CalendarIcon, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Toast } from '@/src/components/ui/toast';
+import { authApi } from '@/src/lib/auth';
+import { useAuth } from '@/src/context/auth-context';
 
 type AuthModalProps = Omit<React.ComponentProps<typeof Modal>, 'children'>;
 
+type AuthStep = 'email' | 'signin' | 'signup';
+
 export function AuthModal(props: AuthModalProps) {
     const router = useRouter();
-    const [toastVisible, setToastVisible] = React.useState(false);
-    const [toastMessage, setToastMessage] = React.useState('');
-    
-    const showComingSoonToast = () => {
-        setToastMessage('This feature will be available soon!');
+    const { login } = useAuth();
+    const [step, setStep] = useState<AuthStep>('email');
+    const [isLoading, setIsLoading] = useState(false);
+
+    // Form States
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [username, setUsername] = useState('');
+    const [fullName, setFullName] = useState('');
+    const [dob, setDob] = useState('');
+
+    // Toast State
+    const [toastVisible, setToastVisible] = useState(false);
+    const [toastMessage, setToastMessage] = useState('');
+
+    const showToast = (msg: string) => {
+        setToastMessage(msg);
         setToastVisible(true);
     };
-    
+
     const hideToast = () => {
         setToastVisible(false);
     };
-    
+
+    const handleEmailSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!email) return showToast('Please enter your email');
+
+        setIsLoading(true);
+        try {
+            const res = await authApi.start(email);
+            if (res.exists) {
+                setStep('signin');
+            } else {
+                setStep('signup');
+            }
+        } catch (error: any) {
+            showToast(error.message || 'Something went wrong');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleSignin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!password) return showToast('Please enter your password');
+
+        setIsLoading(true);
+        try {
+            const res = await authApi.signin({ email, password });
+            login(res.access_token, res.user);
+            showToast('Successfully signed in!');
+            setTimeout(() => {
+                props.onOpenChange?.(false);
+                router.push('/chat');
+            }, 1000);
+        } catch (error: any) {
+            showToast(error.message || 'Invalid credentials');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleSignup = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!password || !confirmPassword || !username || !fullName || !dob) {
+            return showToast('Please fill in all fields');
+        }
+        if (password !== confirmPassword) {
+            return showToast('Passwords do not match');
+        }
+
+        setIsLoading(true);
+        try {
+            const res = await authApi.signup({
+                email,
+                password,
+                confirm_password: confirmPassword,
+                username,
+                full_name: fullName,
+                dob
+            });
+            login(res.access_token, res.user);
+            showToast('Account created successfully!');
+            setTimeout(() => {
+                props.onOpenChange?.(false);
+                router.push('/chat');
+            }, 1000);
+        } catch (error: any) {
+            showToast(error.message || 'Signup failed');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const resetFlow = () => {
+        setStep('email');
+        setEmail('');
+        setPassword('');
+        setConfirmPassword('');
+        setUsername('');
+        setFullName('');
+        setDob('');
+    };
+
+    // Reset flow when modal closes
+    React.useEffect(() => {
+        if (!props.open) {
+            setTimeout(resetFlow, 300);
+        }
+    }, [props.open]);
+
     return (
         <Modal {...props}>
             <ModalContent
                 popoverProps={{
-                    className: "bg-white border border-[#0f7d70] shadow-xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-bottom-2 data-[state=open]:slide-in-from-left-1/2 duration-300 rounded-xl"
+                    className: "bg-white border border-[#0f7d70] shadow-xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-bottom-2 data-[state=open]:slide-in-from-left-1/2 duration-300 rounded-xl max-h-[90vh] overflow-y-auto"
                 }}
                 drawerProps={{
-                    className: "bg-white border border-[#0f7d70] shadow-xl rounded-t-xl"
+                    className: "bg-white border border-[#0f7d70] shadow-xl rounded-t-xl max-h-[90vh] overflow-y-auto"
                 }}
             >
-                <ModalHeader 
+                <ModalHeader
                     className="rounded-t-xl"
                     drawerProps={{
                         className: "rounded-t-xl border-b border-[#0f7d70]"
                     }}
                 >
-                    <ModalTitle 
+                    <ModalTitle
                         className="text-center text-2xl font-semibold text-[#0f7d70] py-4"
                         drawerProps={{
                             className: "text-center text-2xl font-semibold text-[#0f7d70] py-4"
                         }}
                     >
-                        Sign In or Join Now!
+                        {step === 'email' && 'Sign In or Join Now!'}
+                        {step === 'signin' && 'Welcome Back!'}
+                        {step === 'signup' && 'Create Your Account'}
                     </ModalTitle>
                     <ModalDescription className="sr-only">
-                        Authentication modal for signing in or creating an account
+                        Authentication modal
                     </ModalDescription>
                 </ModalHeader>
                 <ModalBody>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full duration-300 border-2 border-[#0f7d70] hover:bg-[#0f7d70] group h-12 rounded-lg"
-                        onClick={showComingSoonToast}
-                    >
-                        <GoogleIcon className="w-5 h-5 me-2 group-hover:text-white" />
-                        <span className="group-hover:text-white font-medium">Continue With Google</span>
-                    </Button>
+                    {step === 'email' && (
+                        <form onSubmit={handleEmailSubmit} className="space-y-4">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="w-full duration-300 border-2 border-[#0f7d70] hover:bg-[#0f7d70] group h-12 rounded-lg"
+                                onClick={() => showToast('Google login coming soon!')}
+                            >
+                                <GoogleIcon className="w-5 h-5 me-2 group-hover:text-white" />
+                                <span className="group-hover:text-white font-medium">Continue With Google</span>
+                            </Button>
 
-                    <div className="relative my-6">
-                        <div className="absolute inset-0 flex items-center">
-                            <span className="w-full border-t border-[#0f7d70]/30" />
-                        </div>
-                        <div className="relative flex justify-center text-xs uppercase">
-                            <span className="bg-white text-[#0f7d70] px-4 font-bold">
-                                OR
-                            </span>
-                        </div>
-                    </div>
-                    <p className="text-[#0f7d70] mb-3 text-start text-sm font-medium">
-                        Enter your email address to sign in or create an account
-                    </p>
-                    <div className="relative h-max mb-4">
-                        <Input
-                            placeholder="your.email@example.com"
-                            className="peer ps-9 h-12 border-2 border-[#0f7d70]/30 focus:border-[#0f7d70] focus:ring-2 focus:ring-[#0f7d70]/20 rounded-lg text-[#0f7d70] bg-white"
-                            type="email"
-                        />
-                        <div className="text-[#0f7d70] pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 peer-disabled:opacity-50">
-                            <AtSignIcon className="size-5" aria-hidden="true" />
-                        </div>
-                    </div>
+                            <div className="relative my-6">
+                                <div className="absolute inset-0 flex items-center">
+                                    <span className="w-full border-t border-[#0f7d70]/30" />
+                                </div>
+                                <div className="relative flex justify-center text-xs uppercase">
+                                    <span className="bg-white text-[#0f7d70] px-4 font-bold">
+                                        OR
+                                    </span>
+                                </div>
+                            </div>
 
-                    <Button
-                        type="button"
-                        className="w-full duration-300 bg-[#0f7d70] hover:bg-[#0c6a61] text-white h-12 rounded-lg font-medium"
-                        onClick={() => router.push('/chat')}
-                    >
-                        <span>Continue With Email</span>
-                    </Button>
+                            <div className="relative h-max">
+                                <Input
+                                    placeholder="your.email@example.com"
+                                    className="peer ps-9 h-12 border-2 border-[#0f7d70]/30 focus:border-[#0f7d70] focus:ring-2 focus:ring-[#0f7d70]/20 rounded-lg text-[#0f7d70] bg-white"
+                                    type="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    autoFocus
+                                />
+                                <div className="text-[#0f7d70] pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 peer-disabled:opacity-50">
+                                    <AtSignIcon className="size-5" aria-hidden="true" />
+                                </div>
+                            </div>
+
+                            <Button
+                                type="submit"
+                                disabled={isLoading}
+                                className="w-full duration-300 bg-[#0f7d70] hover:bg-[#0c6a61] text-white h-12 rounded-lg font-medium"
+                            >
+                                {isLoading ? <Loader2 className="animate-spin" /> : 'Continue'}
+                            </Button>
+                        </form>
+                    )}
+
+                    {step === 'signin' && (
+                        <form onSubmit={handleSignin} className="space-y-4">
+                            <div className="text-sm text-center text-gray-600 mb-4">
+                                Signing in as <span className="font-semibold text-[#0f7d70]">{email}</span>
+                                <button type="button" onClick={() => setStep('email')} className="ml-2 text-xs text-blue-500 hover:underline">Change</button>
+                            </div>
+
+                            <div className="relative h-max">
+                                <Input
+                                    placeholder="Password"
+                                    className="peer ps-9 h-12 border-2 border-[#0f7d70]/30 focus:border-[#0f7d70] focus:ring-2 focus:ring-[#0f7d70]/20 rounded-lg text-[#0f7d70] bg-white"
+                                    type="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    autoFocus
+                                />
+                                <div className="text-[#0f7d70] pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 peer-disabled:opacity-50">
+                                    <LockIcon className="size-5" aria-hidden="true" />
+                                </div>
+                            </div>
+
+                            <Button
+                                type="submit"
+                                disabled={isLoading}
+                                className="w-full duration-300 bg-[#0f7d70] hover:bg-[#0c6a61] text-white h-12 rounded-lg font-medium"
+                            >
+                                {isLoading ? <Loader2 className="animate-spin" /> : 'Sign In'}
+                            </Button>
+
+                            <div className="text-center">
+                                <button type="button" className="text-xs text-[#0f7d70] hover:underline">
+                                    Forgot Password?
+                                </button>
+                            </div>
+                        </form>
+                    )}
+
+                    {step === 'signup' && (
+                        <form onSubmit={handleSignup} className="space-y-3">
+                            <div className="text-sm text-center text-gray-600 mb-2">
+                                Creating account for <span className="font-semibold text-[#0f7d70]">{email}</span>
+                                <button type="button" onClick={() => setStep('email')} className="ml-2 text-xs text-blue-500 hover:underline">Change</button>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="relative h-max">
+                                    <Input
+                                        placeholder="Username"
+                                        className="peer ps-9 h-10 border-2 border-[#0f7d70]/30 focus:border-[#0f7d70] focus:ring-2 focus:ring-[#0f7d70]/20 rounded-lg text-[#0f7d70] bg-white"
+                                        value={username}
+                                        onChange={(e) => setUsername(e.target.value)}
+                                    />
+                                    <div className="text-[#0f7d70] pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 peer-disabled:opacity-50">
+                                        <UserIcon className="size-4" aria-hidden="true" />
+                                    </div>
+                                </div>
+                                <div className="relative h-max">
+                                    <Input
+                                        placeholder="Full Name"
+                                        className="peer ps-9 h-10 border-2 border-[#0f7d70]/30 focus:border-[#0f7d70] focus:ring-2 focus:ring-[#0f7d70]/20 rounded-lg text-[#0f7d70] bg-white"
+                                        value={fullName}
+                                        onChange={(e) => setFullName(e.target.value)}
+                                    />
+                                    <div className="text-[#0f7d70] pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 peer-disabled:opacity-50">
+                                        <UserIcon className="size-4" aria-hidden="true" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="relative h-max">
+                                <Input
+                                    placeholder="Date of Birth"
+                                    type="date"
+                                    className="peer ps-9 h-10 border-2 border-[#0f7d70]/30 focus:border-[#0f7d70] focus:ring-2 focus:ring-[#0f7d70]/20 rounded-lg text-[#0f7d70] bg-white"
+                                    value={dob}
+                                    onChange={(e) => setDob(e.target.value)}
+                                />
+                                <div className="text-[#0f7d70] pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 peer-disabled:opacity-50">
+                                    <CalendarIcon className="size-4" aria-hidden="true" />
+                                </div>
+                            </div>
+
+                            <div className="relative h-max">
+                                <Input
+                                    placeholder="Password"
+                                    type="password"
+                                    className="peer ps-9 h-10 border-2 border-[#0f7d70]/30 focus:border-[#0f7d70] focus:ring-2 focus:ring-[#0f7d70]/20 rounded-lg text-[#0f7d70] bg-white"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                />
+                                <div className="text-[#0f7d70] pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 peer-disabled:opacity-50">
+                                    <LockIcon className="size-4" aria-hidden="true" />
+                                </div>
+                            </div>
+
+                            <div className="relative h-max">
+                                <Input
+                                    placeholder="Confirm Password"
+                                    type="password"
+                                    className="peer ps-9 h-10 border-2 border-[#0f7d70]/30 focus:border-[#0f7d70] focus:ring-2 focus:ring-[#0f7d70]/20 rounded-lg text-[#0f7d70] bg-white"
+                                    value={confirmPassword}
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                />
+                                <div className="text-[#0f7d70] pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 peer-disabled:opacity-50">
+                                    <LockIcon className="size-4" aria-hidden="true" />
+                                </div>
+                            </div>
+
+                            <Button
+                                type="submit"
+                                disabled={isLoading}
+                                className="w-full duration-300 bg-[#0f7d70] hover:bg-[#0c6a61] text-white h-12 rounded-lg font-medium"
+                            >
+                                {isLoading ? <Loader2 className="animate-spin" /> : 'Create Account'}
+                            </Button>
+                        </form>
+                    )}
                 </ModalBody>
                 <ModalFooter
                     className="p-4 rounded-b-xl"
@@ -118,10 +348,10 @@ export function AuthModal(props: AuthModalProps) {
                     </p>
                 </ModalFooter>
             </ModalContent>
-            <Toast 
-                message={toastMessage} 
-                isVisible={toastVisible} 
-                onClose={hideToast} 
+            <Toast
+                message={toastMessage}
+                isVisible={toastVisible}
+                onClose={hideToast}
             />
         </Modal>
     );
