@@ -1,7 +1,6 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
-from typing import List, Union
-from pydantic import AnyHttpUrl, validator
+from typing import List, Union, Optional
 import os
 from dotenv import load_dotenv
 
