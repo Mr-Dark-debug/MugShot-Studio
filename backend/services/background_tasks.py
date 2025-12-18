@@ -19,13 +19,13 @@ from typing import Optional, List, Dict, Any
 import httpx
 from datetime import datetime
 
-from app.core.config import get_settings
-from app.db.supabase import get_supabase
-from app.services.gemini_service import GeminiService
-from app.services.bytedance_service import ByteDanceService
-from app.services.fal_service import FalService
-from app.utils.credit_calculator import calculate_job_credits, InsufficientCreditsException
-from app.core.storage import StorageConfig
+from core.config import get_settings
+from db.supabase import get_supabase
+from services.gemini_service import GeminiService
+from services.bytedance_service import ByteDanceService
+from services.fal_service import FalService
+from utils.credit_calculator import calculate_job_credits, InsufficientCreditsException
+from core.storage import StorageConfig
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

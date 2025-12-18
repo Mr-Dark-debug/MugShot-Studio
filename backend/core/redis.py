@@ -15,7 +15,7 @@ Features:
 import logging
 from typing import Optional, Any
 from upstash_redis.asyncio import Redis
-from app.core.config import settings
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 

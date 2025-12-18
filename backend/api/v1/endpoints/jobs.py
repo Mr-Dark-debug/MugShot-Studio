@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from app.core.security import get_current_user
-from app.db.supabase import get_supabase
-from app.utils.credit_calculator import calculate_job_credits, get_model_info
-from app.utils.exceptions import handle_exception, InsufficientCreditsException
+from core.security import get_current_user
+from db.supabase import get_supabase
+from utils.credit_calculator import calculate_job_credits, get_model_info
+from utils.exceptions import handle_exception, InsufficientCreditsException
 from pydantic import BaseModel
 from typing import Optional
-from app.services.background_tasks import process_thumbnail_job_sync
+from services.background_tasks import process_thumbnail_job_sync
 import logging
 
 logger = logging.getLogger(__name__)

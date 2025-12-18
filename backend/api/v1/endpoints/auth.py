@@ -1,9 +1,9 @@
 from fastapi import APIRouter, HTTPException, status, Depends, BackgroundTasks
 from pydantic import BaseModel, EmailStr, Field
-from app.db.supabase import get_supabase
-from app.core.auth import get_password_hash, verify_password, create_access_token
-from app.core.redis import get_redis
-from app.core.ratelimit import RateLimiter
+from db.supabase import get_supabase
+from core.auth import get_password_hash, verify_password, create_access_token
+from core.redis import get_redis
+from core.ratelimit import RateLimiter
 from datetime import date
 import secrets
 from typing import Any

@@ -10,9 +10,9 @@ import httpx
 import base64
 import asyncio
 from typing import List, Optional
-from app.core.config import get_settings
-from app.utils.logger import logger
-from app.utils.exceptions import ModelGenerationException
+from core.config import get_settings
+from utils.logger import logger
+from utils.exceptions import ModelGenerationException
 
 settings = get_settings()
 

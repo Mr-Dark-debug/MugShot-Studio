@@ -1,8 +1,8 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
-from app.core.auth import get_current_user
-from app.db.supabase import get_supabase
-from app.core.config import settings
-from app.core.storage import StorageConfig
+from core.auth import get_current_user
+from db.supabase import get_supabase
+from core.config import settings
+from core.storage import StorageConfig
 import uuid
 import time
 import os

@@ -12,9 +12,9 @@ from datetime import datetime
 import os
 
 # Import settings and routers
-from app.core.config import settings
-from app.core.logging import setup_logging
-from app.api.v1.endpoints import projects, jobs, assets, auth, chat, profile
+from core.config import settings
+from core.logging import setup_logging
+from api.v1.endpoints import projects, jobs, assets, auth, chat, profile
 
 # Setup logging
 setup_logging()

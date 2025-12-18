@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.core.auth import get_current_user
-from app.db.supabase import get_supabase
+from core.auth import get_current_user
+from db.supabase import get_supabase
 from pydantic import BaseModel
 from typing import Optional, List
 import uuid

@@ -12,7 +12,7 @@ Features:
 """
 
 from fastapi import HTTPException, Request, Depends
-from app.core.redis import get_redis, RedisTokenStore
+from core.redis import get_redis, RedisTokenStore
 from typing import Any
 import logging
 

@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import date
-from app.core.security import get_current_user
-from app.db.supabase import get_supabase
-from app.core.storage import StorageConfig
+from core.security import get_current_user
+from db.supabase import get_supabase
+from core.storage import StorageConfig
 import uuid
 
 router = APIRouter()

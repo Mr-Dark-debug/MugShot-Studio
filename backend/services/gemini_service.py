@@ -8,9 +8,9 @@ Optimized for serverless deployments with proper async/await patterns.
 from typing import List, Optional
 import base64
 import asyncio
-from app.core.config import get_settings
-from app.utils.logger import logger
-from app.utils.exceptions import ModelGenerationException
+from core.config import get_settings
+from utils.logger import logger
+from utils.exceptions import ModelGenerationException
 import google.generativeai as genai
 from google.generativeai.types import GenerateContentResponse
 
