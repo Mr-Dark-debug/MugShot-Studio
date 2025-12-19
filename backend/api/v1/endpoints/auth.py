@@ -1,11 +1,12 @@
 from fastapi import APIRouter, HTTPException, status, Depends, BackgroundTasks
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from db.supabase import get_supabase
 from core.auth import get_password_hash, verify_password, create_access_token
 from core.redis import get_redis
 from core.ratelimit import RateLimiter
 from datetime import date
 import secrets
+import random
 from typing import Any
 import logging
 
@@ -13,31 +14,55 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+def to_camel(string: str) -> str:
+    """Convert snake_case to camelCase"""
+    components = string.split('_')
+    return components[0] + ''.join(x.capitalize() for x in components[1:])
+
 class UserSignup(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    
     email: EmailStr
     password: str
     confirm_password: str
     username: str = Field(..., min_length=3, max_length=30, pattern="^[a-zA-Z0-9._-]+$")
     full_name: str
     dob: date
+    newsletter_opt_in: bool = False
 
 class UserSignin(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    
     email: EmailStr
     password: str
 
 class AuthStart(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    
     email: EmailStr
 
 class ForgotPassword(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    
     email: EmailStr
 
 class ResetPassword(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    
     token: str
     new_password: str
     confirm_password: str
 
 class ResendConfirmation(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    
     email: EmailStr
+
+class VerifyOTP(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    
+    email: EmailStr
+    code: str
 
 @router.post("/start")
 async def auth_start(payload: AuthStart):
@@ -70,15 +95,24 @@ async def signup(payload: UserSignup, background_tasks: BackgroundTasks, redis: 
         "username": payload.username,
         "full_name": payload.full_name,
         "dob": payload.dob.isoformat(),
-        "email_confirmed": True,  # Set to True to skip email confirmation
-        "credits": 100  # Give new users 100 credits to start with
+        "email_confirmed": False,  # Require email confirmation
+        "credits": 100,  # Give new users 100 credits to start with
+        "newsletter_opt_in": payload.newsletter_opt_in
     }
     
     try:
         response = supabase.table("users").insert(user_data).execute()
         new_user = response.data[0]
         
-        # Skip confirmation token generation and email sending
+        # Generate 6-digit OTP code
+        otp_code = str(random.randint(100000, 999999))
+        
+        # Store OTP in Redis with 10-minute expiration
+        await redis.setex(f"otp_confirm:{payload.email}", 600, otp_code)
+        
+        # Send OTP email in background
+        from utils.email_utils import send_otp_email
+        background_tasks.add_task(send_otp_email, payload.email, otp_code)
         
         # Audit Log
         supabase.table("audit").insert({
@@ -88,14 +122,11 @@ async def signup(payload: UserSignup, background_tasks: BackgroundTasks, redis: 
             "meta": {"email": payload.email}
         }).execute()
         
-        # Return access token directly for immediate login
-        access_token = create_access_token(data={"sub": new_user["id"]})
+        # Return response indicating email confirmation is needed
         return {
             "user_id": new_user["id"], 
-            "access_token": access_token, 
-            "token_type": "bearer",
-            "user": new_user,
-            "next": "dashboard"  # Redirect to dashboard instead of confirm_email
+            "message": "User created successfully. Please check your email for confirmation code.",
+            "next": "confirm_email"
         }
     except Exception as e:
         # Log the actual error for debugging
@@ -134,8 +165,47 @@ async def confirm_email(token: str, redis: Any = Depends(get_redis)):
     await redis.delete(f"confirm_email:{token}")
     return {"message": "Email confirmed successfully"}
 
+@router.post("/verify-otp")
+async def verify_otp(payload: VerifyOTP, redis: Any = Depends(get_redis)):
+    # Get stored OTP from Redis
+    stored_otp = await redis.get(f"otp_confirm:{payload.email}")
+    
+    if not stored_otp:
+        raise HTTPException(status_code=400, detail="OTP expired or not found")
+    
+    if stored_otp != payload.code:
+        raise HTTPException(status_code=400, detail="Invalid OTP code")
+    
+    # Update user as email confirmed
+    supabase = get_supabase()
+    response = supabase.table("users").select("id").eq("email", payload.email).execute()
+    
+    if not response.data:
+        raise HTTPException(status_code=400, detail="User not found")
+    
+    user_id = response.data[0]["id"]
+    supabase.table("users").update({"email_confirmed": True}).eq("id", user_id).execute()
+    
+    # Remove OTP from Redis
+    await redis.delete(f"otp_confirm:{payload.email}")
+    
+    # Create access token for immediate login
+    access_token = create_access_token(data={"sub": user_id})
+    
+    # Get user data for response
+    user_response = supabase.table("users").select("*").eq("id", user_id).execute()
+    user = user_response.data[0]
+    
+    return {
+        "user_id": user_id, 
+        "access_token": access_token, 
+        "token_type": "bearer",
+        "user": user,
+        "message": "Email verified successfully"
+    }
+
 @router.post("/resend-confirmation", dependencies=[Depends(RateLimiter(times=3, seconds=60))])
-async def resend_confirmation(payload: ResendConfirmation, redis: Any = Depends(get_redis)):
+async def resend_confirmation(payload: ResendConfirmation, background_tasks: BackgroundTasks, redis: Any = Depends(get_redis)):
     supabase = get_supabase()
     response = supabase.table("users").select("id, email_confirmed").eq("email", payload.email).execute()
     
@@ -147,10 +217,17 @@ async def resend_confirmation(payload: ResendConfirmation, redis: Any = Depends(
     if user["email_confirmed"]:
         return {"message": "Email already confirmed"}
         
-    token = secrets.token_urlsafe(32)
-    await redis.setex(f"confirm_email:{token}", 600, user["id"])
+    # Generate 6-digit OTP code
+    otp_code = str(random.randint(100000, 999999))
     
-    print(f"DEBUG: Resend Confirmation Link: /auth/confirm?token={token}")
+    # Store OTP in Redis with 10-minute expiration
+    await redis.setex(f"otp_confirm:{payload.email}", 600, otp_code)
+    
+    # Send OTP email in background
+    from utils.email_utils import send_otp_email
+    background_tasks.add_task(send_otp_email, payload.email, otp_code)
+    
+    print(f"DEBUG: Resent OTP code: {otp_code}")
     return {"message": "If account exists, confirmation email sent"}
 
 @router.post("/forgot-password", dependencies=[Depends(RateLimiter(times=3, seconds=60))])
@@ -189,3 +266,24 @@ async def reset_password(payload: ResetPassword, redis: Any = Depends(get_redis)
     
     await redis.delete(f"reset_password:{payload.token}")
     return {"message": "Password reset successfully"}
+
+@router.get("/check-username/{username}")
+async def check_username_availability(username: str):
+    """
+    Check if a username is available.
+    
+    Args:
+        username (str): Username to check
+        
+    Returns:
+        dict: {"available": bool}
+    """
+    supabase = get_supabase()
+    response = supabase.table("users").select("id").eq("username", username).execute()
+    
+    if response.data:
+        # Username taken
+        raise HTTPException(status_code=409, detail="Username already taken")
+    else:
+        # Username available
+        return {"available": True}

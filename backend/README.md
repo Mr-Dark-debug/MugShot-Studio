@@ -153,13 +153,14 @@ Create a new user account.
   {
     "email": "user@example.com",
     "password": "securepassword",
-    "confirm_password": "securepassword",
+    "confirmPassword": "securepassword",
     "username": "uniqueusername",
-    "full_name": "User Name",
-    "dob": "1990-01-01"
+    "fullName": "User Name",
+    "dob": "1990-01-01",
+    "newsletterOptIn": false
   }
   ```
-- **Response**: `{ "user_id": "uuid", "next": "confirm_email" }`
+- **Response**: `{ "user_id": "uuid", "message": "User created successfully. Please check your email for confirmation code.", "next": "confirm_email" }`
 - **Example**:
   ```bash
   curl -X POST "http://localhost:8000/api/v1/auth/signup" \
@@ -167,11 +168,54 @@ Create a new user account.
     -d '{
       "email": "user@example.com",
       "password": "securepassword",
-      "confirm_password": "securepassword",
+      "confirmPassword": "securepassword",
       "username": "uniqueusername",
-      "full_name": "User Name",
-      "dob": "1990-01-01"
+      "fullName": "User Name",
+      "dob": "1990-01-01",
+      "newsletterOptIn": false
     }'
+  ```
+
+#### POST `/api/v1/auth/verify-otp`
+Verify email with OTP code.
+- **Request Body**: 
+  ```json
+  {
+    "email": "user@example.com",
+    "code": "123456"
+  }
+  ```
+- **Response**: `{ "user_id": "uuid", "access_token": "jwt_token", "token_type": "bearer", "user": {user_object}, "message": "Email verified successfully" }`
+- **Authentication**: None
+- **Example**:
+  ```bash
+  curl -X POST "http://localhost:8000/api/v1/auth/verify-otp" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "email": "user@example.com",
+      "code": "123456"
+    }'
+  ```
+
+#### GET `/api/v1/auth/check-username/{username}`
+Check if username is available.
+- **Response**: `{ "available": true }` or 409 Conflict if taken
+- **Authentication**: None
+- **Example**:
+  ```bash
+  curl -X GET "http://localhost:8000/api/v1/auth/check-username/desiredusername"
+  ```
+
+#### POST `/api/v1/auth/resend-confirmation`
+Resend OTP code to email.
+- **Request Body**: `{ "email": "user@example.com" }`
+- **Response**: `{ "message": "If account exists, confirmation email sent" }`
+- **Authentication**: None
+- **Example**:
+  ```bash
+  curl -X POST "http://localhost:8000/api/v1/auth/resend-confirmation" \
+    -H "Content-Type: application/json" \
+    -d '{"email": "user@example.com"}'
   ```
 
 #### POST `/api/v1/auth/signin`
@@ -185,6 +229,7 @@ Sign in to an existing account.
   ```
 - **Response**: `{ "access_token": "jwt_token", "token_type": "bearer", "user": {user_object} }`
 - **Authentication**: None (required for sign-in)
+- **Note**: User must have confirmed their email address.
 - **Example**:
   ```bash
   curl -X POST "http://localhost:8000/api/v1/auth/signin" \

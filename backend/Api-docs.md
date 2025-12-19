@@ -43,17 +43,18 @@ Registers a new user account.
 
 *   **Method:** `POST`
 *   **URL:** `{{base_url}}/api/v1/auth/signup`
-*   **Description:** Creates a new user account. New users receive 100 free credits upon registration. Email confirmation is no longer required.
+*   **Description:** Creates a new user account. New users receive 100 free credits upon registration. Email confirmation is required using a 6-digit OTP code.
 
 **Request Body (JSON):**
 ```json
 {
   "email": "user@example.com",
   "password": "securepassword123",
-  "confirm_password": "securepassword123",
+  "confirmPassword": "securepassword123",
   "username": "cooluser123",
-  "full_name": "John Doe",
-  "dob": "1990-01-01"
+  "fullName": "John Doe",
+  "dob": "1990-01-01",
+  "newsletterOptIn": false
 }
 ```
 
@@ -68,63 +69,116 @@ Registers a new user account.
 ```json
 {
   "user_id": "uuid-string...",
-  "access_token": "eyJhbG...",
-  "token_type": "bearer",
-  "user": { ... },
-  "next": "dashboard"
+  "message": "User created successfully. Please check your email for confirmation code.",
+  "next": "confirm_email"
 }
 ```
-*Note: Users are automatically logged in after signup. No email confirmation required.*
-
-**Important Configuration Note:**
-The application requires proper Supabase configuration with a service role key to bypass row-level security policies. Ensure your `.env` file includes `SUPABASE_SERVICE_ROLE_KEY` with the appropriate key from your Supabase dashboard.
-
-Additionally, the application uses three storage buckets:
-- `profile_photos` - for user profile pictures
-- `user_assets` - for general user assets
-- `renders` - for generated thumbnail images
-
-These can be customized via environment variables:
-- `PROFILE_PHOTOS_BUCKET`
-- `USER_ASSETS_BUCKET` 
-- `RENDERS_BUCKET`
-
-**Error Response (500 Internal Server Error):**
-If there are database permission issues, the server will return a more descriptive error message to help with troubleshooting.
+*Note: Users must verify their email with the 6-digit OTP code sent to their email.*
 
 ---
 
-## 3. Confirm Email
-Verifies the user's email address using the token received (simulated in logs).
+## 3. Verify OTP
+Verifies the user's email address using the 6-digit OTP code received via email.
 
 *   **Method:** `POST`
-*   **URL:** `{{base_url}}/api/v1/auth/confirm`
-*   **Description:** Confirms the email address.
+*   **URL:** `{{base_url}}/api/v1/auth/verify-otp`
+*   **Description:** Confirms the email address using the OTP code.
 
-**Query Parameters:**
-*   `token`: The token string from the signup response or backend logs.
+**Request Body (JSON):**
+```json
+{
+  "email": "user@example.com",
+  "code": "123456"
+}
+```
 
 **Postman Instructions:**
 1.  Set method to **POST**.
-2.  Enter URL: `http://localhost:8000/api/v1/auth/confirm?token=YOUR_TOKEN_HERE`
-    *   Replace `YOUR_TOKEN_HERE` with the actual token.
+2.  Enter URL: `http://localhost:8000/api/v1/auth/verify-otp`
+3.  Go to **Body** tab -> Select **raw** -> Select **JSON**.
+4.  Paste the JSON above.
+5.  Click **Send**.
+
+**Expected Response (200 OK):**
+```json
+{
+  "user_id": "uuid-string...",
+  "access_token": "eyJhbG...",
+  "token_type": "bearer",
+  "user": { ... },
+  "message": "Email verified successfully"
+}
+```
+
+---
+
+## 4. Resend Confirmation
+Resends the email confirmation OTP code.
+
+*   **Method:** `POST`
+*   **URL:** `{{base_url}}/api/v1/auth/resend-confirmation`
+*   **Description:** Triggers a new confirmation email with OTP code.
+
+**Request Body (JSON):**
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+**Postman Instructions:**
+1.  Set method to **POST**.
+2.  Enter URL: `http://localhost:8000/api/v1/auth/resend-confirmation`
+3.  Go to **Body** tab -> Select **raw** -> Select **JSON**.
+4.  Paste the JSON above.
+5.  Click **Send**.
+
+**Expected Response (200 OK):**
+```json
+{
+  "message": "If account exists, confirmation email sent"
+}
+```
+
+---
+
+## 5. Check Username Availability
+Checks if a username is available in real-time.
+
+*   **Method:** `GET`
+*   **URL:** `{{base_url}}/api/v1/auth/check-username/{username}`
+*   **Description:** Checks if a username is available for registration.
+
+**Path Parameter:**
+*   `username`: The username to check
+
+**Postman Instructions:**
+1.  Set method to **GET**.
+2.  Enter URL: `http://localhost:8000/api/v1/auth/check-username/mydesiredusername`
 3.  Click **Send**.
 
 **Expected Response (200 OK):**
 ```json
 {
-  "message": "Email confirmed successfully"
+  "available": true
+}
+```
+
+**Error Response (409 Conflict):**
+```json
+{
+  "detail": "Username already taken"
 }
 ```
 
 ---
 
-## 4. Signin
+## 6. Signin
 Logs in the user and returns an access token.
 
 *   **Method:** `POST`
 *   **URL:** `{{base_url}}/api/v1/auth/signin`
-*   **Description:** Authenticates the user. Email confirmation is no longer required for login.
+*   **Description:** Authenticates the user. Email must be confirmed.
 
 **Request Body (JSON):**
 ```json
@@ -153,37 +207,7 @@ Logs in the user and returns an access token.
 
 ---
 
-## 5. Resend Confirmation
-Resends the email confirmation link.
-
-*   **Method:** `POST`
-*   **URL:** `{{base_url}}/api/v1/auth/resend-confirmation`
-*   **Description:** Triggers a new confirmation email.
-
-**Request Body (JSON):**
-```json
-{
-  "email": "user@example.com"
-}
-```
-
-**Postman Instructions:**
-1.  Set method to **POST**.
-2.  Enter URL: `http://localhost:8000/api/v1/auth/resend-confirmation`
-3.  Go to **Body** tab -> Select **raw** -> Select **JSON**.
-4.  Paste the JSON above.
-5.  Click **Send**.
-
-**Expected Response (200 OK):**
-```json
-{
-  "message": "If account exists, confirmation email sent"
-}
-```
-
----
-
-## 6. Forgot Password
+## 7. Forgot Password
 Initiates the password reset flow.
 
 *   **Method:** `POST`
@@ -210,23 +234,22 @@ Initiates the password reset flow.
   "message": "If account exists, reset instructions sent"
 }
 ```
-*Note: Check backend logs for the reset token.*
 
 ---
 
-## 7. Reset Password
-Sets a new password using the reset token.
+## 8. Reset Password
+Completes the password reset process.
 
 *   **Method:** `POST`
 *   **URL:** `{{base_url}}/api/v1/auth/reset-password`
-*   **Description:** Resets the user's password.
+*   **Description:** Sets a new password using the reset token.
 
 **Request Body (JSON):**
 ```json
 {
-  "token": "YOUR_RESET_TOKEN_HERE",
-  "new_password": "newsecurepassword456",
-  "confirm_password": "newsecurepassword456"
+  "token": "reset_token_from_email",
+  "newPassword": "newsecurepassword123",
+  "confirmPassword": "newsecurepassword123"
 }
 ```
 
@@ -234,192 +257,12 @@ Sets a new password using the reset token.
 1.  Set method to **POST**.
 2.  Enter URL: `http://localhost:8000/api/v1/auth/reset-password`
 3.  Go to **Body** tab -> Select **raw** -> Select **JSON**.
-4.  Paste the JSON above (replace `token` with the one from logs).
+4.  Paste the JSON above.
 5.  Click **Send**.
 
 **Expected Response (200 OK):**
 ```json
 {
   "message": "Password reset successfully"
-}
-```
-
----
-
-## 8. Get Profile
-Retrieves the authenticated user's profile information.
-
-*   **Method:** `GET`
-*   **URL:** `{{base_url}}/api/v1/profile/`
-*   **Description:** Gets the current user's profile.
-*   **Auth:** Required (Bearer Token)
-
-**Postman Instructions:**
-1.  Set method to **GET**.
-2.  Enter URL: `http://localhost:8000/api/v1/profile/`
-3.  Go to **Authorization** tab -> Select **Bearer Token**.
-4.  Paste your `access_token`.
-5.  Click **Send**.
-
-**Expected Response (200 OK):**
-```json
-{
-    "id": "uuid...",
-    "email": "user@example.com",
-    "username": "cooluser123",
-    "full_name": "John Doe",
-    "dob": "1990-01-01",
-    "profile_photo_url": null,
-    "plan": "free",
-    "credits": 100,
-    "created_at": "2023-..."
-}
-```
-
----
-
-## 9. Update Profile
-Updates the authenticated user's profile information.
-
-*   **Method:** `PUT`
-*   **URL:** `{{base_url}}/api/v1/profile/`
-*   **Description:** Updates profile fields (username, full_name, dob).
-*   **Auth:** Required (Bearer Token)
-
-**Request Body (JSON):**
-```json
-{
-  "full_name": "Jane Doe",
-  "username": "newusername123"
-}
-```
-
-**Postman Instructions:**
-1.  Set method to **PUT**.
-2.  Enter URL: `http://localhost:8000/api/v1/profile/`
-3.  Go to **Authorization** tab -> Select **Bearer Token**.
-4.  Paste your `access_token`.
-5.  Go to **Body** tab -> Select **raw** -> Select **JSON**.
-6.  Paste the JSON above.
-7.  Click **Send**.
-
-**Expected Response (200 OK):**
-```json
-{
-    "id": "uuid...",
-    "email": "user@example.com",
-    "username": "newusername123",
-    "full_name": "Jane Doe",
-    ...
-}
-```
-
----
-
-## 10. Upload Avatar
-Uploads a profile picture for the user.
-
-*   **Method:** `POST`
-*   **URL:** `{{base_url}}/api/v1/profile/avatar`
-*   **Description:** Uploads an image file (max 5MB).
-*   **Auth:** Required (Bearer Token)
-
-**Postman Instructions:**
-1.  Set method to **POST**.
-2.  Enter URL: `http://localhost:8000/api/v1/profile/avatar`
-3.  Go to **Authorization** tab -> Select **Bearer Token**.
-4.  Paste your `access_token`.
-5.  Go to **Body** tab -> Select **form-data**.
-6.  Key: `file`, Type: **File**, Value: Select an image file (jpg/png).
-7.  Click **Send**.
-
-**Expected Response (200 OK):**
-```json
-{
-    "message": "Avatar uploaded successfully",
-    "url": "https://your-project.supabase.co/storage/v1/object/public/profile_photos/..."
-}
-```
-
----
-
-## 11. Delete Avatar
-Removes the user's profile picture.
-
-*   **Method:** `DELETE`
-*   **URL:** `{{base_url}}/api/v1/profile/avatar`
-*   **Description:** Deletes the current user's profile photo.
-*   **Auth:** Required (Bearer Token)
-
-**Postman Instructions:**
-1.  Set method to **DELETE**.
-2.  Enter URL: `http://localhost:8000/api/v1/profile/avatar`
-3.  Go to **Authorization** tab -> Select **Bearer Token**.
-4.  Paste your `access_token`.
-5.  Click **Send**.
-
-**Expected Response (200 OK):**
-```json
-{
-    "message": "Avatar removed successfully"
-}
-```
-
----
-
-## 12. Delete Account
-Permanently deletes the user's account.
-
-*   **Method:** `DELETE`
-*   **URL:** `{{base_url}}/api/v1/profile/`
-*   **Description:** Deletes the current user's account and all associated data.
-*   **Auth:** Required (Bearer Token)
-
-**Postman Instructions:**
-1.  Set method to **DELETE**.
-2.  Enter URL: `http://localhost:8000/api/v1/profile/`
-3.  Go to **Authorization** tab -> Select **Bearer Token**.
-4.  Paste your `access_token`.
-5.  Click **Send**.
-
-**Expected Response:**
-*   **Status:** 204 No Content
-
----
-
-## 13. Upload Asset
-Uploads an asset (reference image, selfie, etc.) for use in projects.
-
-*   **Method:** `POST`
-*   **URL:** `{{base_url}}/api/v1/assets/upload`
-*   **Description:** Uploads an image file (max 8MB) for use in thumbnail generation.
-*   **Auth:** Required (Bearer Token)
-
-**Form Data:**
-*   `file`: The image file (jpg/png/webp)
-*   `type`: The asset type (`selfie`, `ref`, `copy_target`, `profile_photo`)
-
-**Postman Instructions:**
-1.  Set method to **POST**.
-2.  Enter URL: `http://localhost:8000/api/v1/assets/upload`
-3.  Go to **Authorization** tab -> Select **Bearer Token**.
-4.  Paste your `access_token`.
-5.  Go to **Body** tab -> Select **form-data**.
-6.  Add two fields:
-    *   Key: `file`, Type: **File**, Value: Select an image file
-    *   Key: `type`, Type: **Text**, Value: `ref` (or `selfie`, `copy_target`)
-7.  Click **Send**.
-
-**Expected Response (200 OK):**
-```json
-{
-    "id": "uuid...",
-    "user_id": "uuid...",
-    "type": "ref",
-    "storage_path": "user_id/ref/uuid_timestamp.jpg",
-    "width": 0,
-    "height": 0,
-    "md5": "",
-    "created_at": "2023-..."
 }
 ```
