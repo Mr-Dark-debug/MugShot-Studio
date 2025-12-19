@@ -28,6 +28,7 @@ class UserSignup(BaseModel):
     full_name: str
     dob: date
     newsletter_opt_in: bool = False
+    redirect_to: Optional[str] = None
 
 class UserSignin(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
@@ -39,6 +40,7 @@ class UserSigninOtp(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
     
     email: EmailStr
+    redirect_to: Optional[str] = None
 
 class AuthStart(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
@@ -94,17 +96,22 @@ async def signup(payload: UserSignup, background_tasks: BackgroundTasks):
     
     try:
         # Use Supabase Auth to sign up the user
+        auth_options = {
+            "data": {
+                "username": payload.username,
+                "full_name": payload.full_name,
+                "dob": payload.dob.isoformat(),
+                "newsletter_opt_in": payload.newsletter_opt_in
+            }
+        }
+        
+        if payload.redirect_to:
+            auth_options["email_redirect_to"] = payload.redirect_to
+
         auth_response = supabase.auth.sign_up({
             "email": payload.email,
             "password": payload.password,
-            "options": {
-                "data": {
-                    "username": payload.username,
-                    "full_name": payload.full_name,
-                    "dob": payload.dob.isoformat(),
-                    "newsletter_opt_in": payload.newsletter_opt_in
-                }
-            }
+            "options": auth_options
         })
         
         if auth_response.user:
@@ -186,9 +193,14 @@ async def signin_otp(payload: UserSigninOtp):
     
     try:
         # Use Supabase Auth to sign in with OTP/Magic Link
-        auth_response = supabase.auth.sign_in_with_otp({
+        auth_params = {
             "email": payload.email,
-        })
+        }
+        
+        if payload.redirect_to:
+            auth_params["options"] = {"email_redirect_to": payload.redirect_to}
+            
+        auth_response = supabase.auth.sign_in_with_otp(auth_params)
         
         return {"message": "Magic link or OTP sent to email"}
             
