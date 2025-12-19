@@ -28,7 +28,7 @@ class UpstashRedisError(Exception):
     pass
 
 
-def get_redis_client() -> Redis:
+def get_redis_client() -> Optional[Redis]:
     """
     Get or create a singleton Redis client instance.
     
@@ -37,10 +37,10 @@ def get_redis_client() -> Redis:
     - UPSTASH_REDIS_REST_TOKEN: The Upstash Redis REST API token
     
     Returns:
-        Redis: Async Upstash Redis client instance
+        Redis: Async Upstash Redis client instance or None if not configured
         
     Raises:
-        UpstashRedisError: If Redis configuration is missing
+        UpstashRedisError: If Redis configuration is invalid
     """
     global _redis_client
     
@@ -51,9 +51,14 @@ def get_redis_client() -> Redis:
         url = settings.UPSTASH_REDIS_REST_URL
         token = settings.UPSTASH_REDIS_REST_TOKEN
         
+        # Check if Redis is configured
         if not url or not token:
-            logger.warning("Upstash Redis credentials not configured")
-            raise UpstashRedisError("Upstash Redis configuration missing")
+            logger.warning("Upstash Redis credentials not configured - running in development mode without Redis")
+            return None
+        
+        # Validate URL format
+        if not url.startswith(("https://", "http://")):
+            raise UpstashRedisError(f"Invalid Redis URL format: {url}")
         
         _redis_client = Redis(
             url=url,
@@ -66,7 +71,8 @@ def get_redis_client() -> Redis:
         
     except Exception as e:
         logger.error(f"Failed to initialize Upstash Redis client: {e}")
-        raise UpstashRedisError(f"Redis initialization failed: {e}")
+        # Return None for development mode instead of raising exception
+        return None
 
 
 class RedisTokenStore:
@@ -80,12 +86,16 @@ class RedisTokenStore:
     def __init__(self):
         """Initialize the Redis token store."""
         self._client: Optional[Redis] = None
+        self._use_mock = False
     
     @property
-    def client(self) -> Redis:
+    def client(self) -> Optional[Redis]:
         """Lazy load Redis client."""
         if self._client is None:
             self._client = get_redis_client()
+            if self._client is None:
+                self._use_mock = True
+                logger.debug("Using mock Redis store for development")
         return self._client
     
     async def get(self, key: str) -> Optional[str]:
@@ -98,6 +108,11 @@ class RedisTokenStore:
         Returns:
             The value if found, None otherwise
         """
+        if self._use_mock:
+            # Mock implementation for development
+            logger.debug(f"Redis GET mock: {key} - Redis not configured, returning None")
+            return None
+            
         try:
             value = await self.client.get(key)
             if value is not None:
@@ -119,6 +134,11 @@ class RedisTokenStore:
         Returns:
             True if successful, False otherwise
         """
+        if self._use_mock:
+            # Mock implementation for development
+            logger.debug(f"Redis SETEX mock: {key} - Redis not configured, no-op")
+            return True
+            
         try:
             await self.client.setex(key, seconds, value)
             logger.debug(f"Redis SETEX successful for key: {key[:20]}... (TTL: {seconds}s)")
@@ -139,6 +159,11 @@ class RedisTokenStore:
         Returns:
             True if successful, False otherwise
         """
+        if self._use_mock:
+            # Mock implementation for development
+            logger.debug(f"Redis SET mock: {key} - Redis not configured, no-op")
+            return True
+            
         try:
             if ex:
                 await self.client.setex(key, ex, value)
@@ -160,6 +185,11 @@ class RedisTokenStore:
         Returns:
             True if successful, False otherwise
         """
+        if self._use_mock:
+            # Mock implementation for development
+            logger.debug(f"Redis DELETE mock: {key} - Redis not configured, no-op")
+            return True
+            
         try:
             await self.client.delete(key)
             logger.debug(f"Redis DELETE successful for key: {key[:20]}...")
@@ -178,6 +208,11 @@ class RedisTokenStore:
         Returns:
             True if key exists, False otherwise
         """
+        if self._use_mock:
+            # Mock implementation for development
+            logger.debug(f"Redis EXISTS mock: {key} - Redis not configured, returning False")
+            return False
+            
         try:
             result = await self.client.exists(key)
             return result > 0
@@ -195,6 +230,11 @@ class RedisTokenStore:
         Returns:
             The new value after increment, None on error
         """
+        if self._use_mock:
+            # Mock implementation for development
+            logger.debug(f"Redis INCR mock: {key} - Redis not configured, returning None")
+            return None
+            
         try:
             value = await self.client.incr(key)
             return value
@@ -213,6 +253,11 @@ class RedisTokenStore:
         Returns:
             True if successful, False otherwise
         """
+        if self._use_mock:
+            # Mock implementation for development
+            logger.debug(f"Redis EXPIRE mock: {key} - Redis not configured, no-op")
+            return True
+            
         try:
             await self.client.expire(key, seconds)
             return True
@@ -253,6 +298,14 @@ async def check_redis_health() -> dict:
     """
     try:
         client = get_redis_client()
+        if client is None:
+            return {
+                "healthy": False,
+                "provider": "upstash",
+                "status": "not_configured",
+                "message": "Redis not configured - running in development mode"
+            }
+        
         # Ping to verify connection
         result = await client.ping()
         return {

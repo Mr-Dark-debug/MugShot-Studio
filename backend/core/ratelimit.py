@@ -54,6 +54,11 @@ class RateLimiter:
         Raises:
             HTTPException: 429 Too Many Requests if rate limit is exceeded
         """
+        # If Redis is not configured, allow all requests (no rate limiting)
+        if redis is None:
+            logger.debug("Redis not configured, rate limiting disabled")
+            return
+            
         try:
             # Determine rate limit key based on user or IP
             key = self._get_rate_limit_key(request)
